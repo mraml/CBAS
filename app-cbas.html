@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBAS - Compliance Benchmark Authoring Suite</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-dark-navy: #0a192f; --surface-blue: #112240; --primary-accent: #64ffda;
+            --primary-blue: #337ab7; --text-light: #ccd6f6; --text-muted: #8892b0;
+            --border-color: #233554; --disabled-bg: #1a2d4a; --disabled-text: #536c97;
+            --success-color: #4caf50; --error-color: #f44336; --warn-color: #ffc107;
+            --font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+            --severity-critical: #7d1a21; --severity-high: #8c4a03; --severity-moderate: #8c6d03;
+            --severity-low: #036978; --severity-info: #233554;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: var(--font-family); background-color: var(--bg-dark-navy);
+            color: var(--text-light); margin: 0; display: flex;
+            height: 100vh; overflow: hidden;
+        }
+        /* --- Sidebar / Control Panel --- */
+        .sidebar {
+            width: 320px; flex-shrink: 0;
+            background-color: var(--surface-blue); padding: 1.5rem;
+            border-right: 1px solid var(--border-color); display: flex; flex-direction: column;
+        }
+        .sidebar h2 { margin-top: 0; color: var(--primary-accent); font-size: 1.5rem; }
+        .input-group { margin-bottom: 1.5rem; }
+        .input-group label { display: block; font-weight: bold; margin-bottom: 0.5rem; }
+        .input-group input[type="file"] { width: 100%; color: var(--text-muted); }
+        .status {
+            font-size: 0.8rem; color: var(--text-muted); height: 20px; padding-top: 5px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .status.loaded { color: var(--success-color); }
+        .icon-check::before { content: '✔'; color: var(--success-color); margin-right: 5px; }
+        .actions-panel { border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: auto; }
+        .actions-panel h3 { margin-top: 0; color: var(--text-muted); }
+
+        /* --- Main Column (Content + Console) --- */
+        .main-column {
+            flex-grow: 1; display: flex; flex-direction: column; overflow: hidden;
+        }
+        .content-area {
+            flex-grow: 1; padding: 1.5rem; overflow-y: auto;
+        }
+        .welcome-screen, .scan-progress {
+            text-align: center; padding: 2rem; border: 2px dashed var(--border-color);
+            border-radius: 8px; height: 100%; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .scan-report-title {
+            width: 100%; background-color: var(--surface-blue); border: 1px solid var(--border-color);
+            padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px;
+            position: sticky; top: -1.5rem; z-index: 10;
+        }
+        .scan-report-title h3 { margin: 0 0 10px 0; color: var(--primary-accent); }
+        .scan-report-title p { margin: 0; font-size: 0.9rem; color: var(--text-muted); }
+        
+        /* --- Buttons --- */
+        .btn {
+            background-color: var(--primary-blue); color: white; border: none; padding: 12px 18px;
+            border-radius: 4px; cursor: pointer; font-weight: bold; font-family: var(--font-family);
+            transition: background-color 0.2s; display: block; width: 100%; text-align: center;
+            margin-bottom: 10px;
+        }
+        .btn:hover:not(:disabled) { background-color: #4a8ad8; }
+        .btn:disabled {
+            background-color: var(--disabled-bg); color: var(--disabled-text);
+            cursor: not-allowed; border: 1px solid var(--border-color);
+        }
+        .btn-accent { background-color: var(--primary-accent); color: var(--bg-dark-navy); }
+        .btn-accent:hover:not(:disabled) { background-color: #8afff0; }
+        .btn-danger { background-color: var(--warn-color); color: var(--bg-dark-navy); }
+        .btn-danger:hover:not(:disabled) { background-color: #ffca2c; }
+        .view-toggle-btn {
+            background-color: var(--surface-blue); color: var(--text-muted); border: 1px solid var(--border-color);
+            padding: 8px 12px; margin-right: 5px;
+        }
+        .view-toggle-btn.active {
+            background-color: var(--primary-accent); color: var(--bg-dark-navy); border-color: var(--primary-accent);
+        }
+
+        /* --- Results Area --- */
+        .severity-group { margin-bottom: 1rem; }
+        .severity-group-header {
+            font-size: 1.5rem; color: var(--primary-accent);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem; margin-bottom: 1rem;
+            cursor: pointer; user-select: none;
+            display: flex; justify-content: space-between;
+        }
+        .severity-group-content {
+             max-height: 10000px; /* Default open */
+             overflow: hidden;
+             transition: max-height 0.5s ease-in-out;
+        }
+        .finding-accordion-header {
+            background-color: var(--surface-blue); padding: 12px 15px; font-weight: bold;
+            border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;
+            margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;
+        }
+        .finding-accordion-header:hover { border-color: var(--primary-accent); }
+        .finding-title { flex-grow: 1; }
+        .finding-tags { display: flex; gap: 10px; }
+        .tag { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; text-transform: uppercase; }
+        .severity-Critical { background-color: var(--severity-critical); color: var(--text-light); }
+        .severity-High { background-color: var(--severity-high); color: var(--text-light); }
+        .severity-Moderate { background-color: var(--severity-moderate); color: var(--bg-dark-navy); }
+        .severity-Low { background-color: var(--severity-low); color: var(--text-light); }
+        .severity-Informational { background-color: var(--severity-info); color: var(--text-muted); }
+        .confidence-tag { background-color: var(--border-color); color: var(--text-muted); }
+
+        .finding-details {
+            padding: 0 1.5rem; max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out;
+            background-color: rgba(17, 34, 64, 0.3); border: 1px solid var(--border-color);
+            border-top: none; border-radius: 0 0 4px 4px;
+        }
+        .detail-block { padding: 1rem 0; border-bottom: 1px solid var(--border-color); }
+        .detail-block:last-child { border-bottom: none; }
+        .detail-block h5 { margin: 0 0 8px 0; color: var(--primary-accent); text-transform: uppercase; letter-spacing: 1px; }
+        .detail-block p { margin: 0; white-space: pre-wrap; word-wrap: break-word; font-size: 0.9rem; }
+        .detail-block pre { 
+            margin: 0; white-space: pre; word-wrap: normal; font-size: 0.9rem; 
+            background-color: var(--bg-dark-navy); padding: 10px; border-radius: 4px; 
+            overflow-x: auto;
+        }
+        .arrow { transition: transform 0.3s; } .arrow.down { transform: rotate(90deg); }
+
+        /* --- Console --- */
+        .console {
+            background-color: #051021; border-top: 1px solid var(--border-color);
+            height: 200px; display: flex; flex-direction: column; flex-shrink: 0;
+        }
+        .console-content { padding: 10px; overflow-y: auto; flex-grow: 1; font-size: 0.8rem; }
+        .console-content p { margin: 0 0 5px 0; }
+        .error-log { color: var(--error-color); } .warn-log { color: var(--warn-color); }
+        .info-log { color: #2196F3; } .success-log { color: var(--success-color); }
+        
+        /* --- Progress Bar --- */
+        .progress-bar-container { width: 80%; background-color: var(--border-color); border-radius: 4px; margin: 1rem 0; }
+        .progress-bar {
+            height: 20px; width: 0%; background-color: var(--primary-accent);
+            border-radius: 4px; transition: width 0.2s linear;
+        }
+        
+        /* --- Preview Styles --- */
+        #preview-container {
+            background-color: var(--surface-blue); border: 1px solid var(--border-color);
+            padding: 1rem; border-radius: 4px; margin-top: 1.5rem;
+            overflow-x: auto;
+        }
+        #preview-container table {
+            width: 100%; border-collapse: collapse;
+        }
+        #preview-container td {
+            border: 1px solid var(--border-color); padding: 8px; text-align: left;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+        #preview-container th {
+            background-color: #233554; color: var(--primary-accent);
+            border: 1px solid var(--border-color); padding: 8px; text-align: left;
+            font-size: 0.85rem;
+            white-space: normal;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div>
+            <h2>CBAS</h2>
+            <div class="input-group">
+                <label for="catalogFile">1. OSCAL Control Catalog</label>
+                <input type="file" id="catalogFile" accept=".json">
+                <div class="status" id="catalogStatus">Awaiting file...</div>
+            </div>
+            <div class="input-group">
+                <label for="heuristicsFile">2. Heuristics Library</label>
+                <input type="file" id="heuristicsFile" accept=".json">
+                <div class="status" id="heuristicsStatus">Awaiting file...</div>
+            </div>
+            <div class="input-group">
+                <label for="repoFile">3. Software Repository (.zip)</label>
+                <input type="file" id="repoFile" accept=".zip">
+                <div class="status" id="repoStatus">Awaiting file...</div>
+            </div>
+        </div>
+        <div class="actions-panel">
+            <h3>Actions</h3>
+            <button class="btn btn-accent" id="scanBtn" disabled>Scan Repository</button>
+            <button class="btn btn-danger" id="stopScanBtn" style="display: none;">Stop Scan</button>
+            <button class="btn" id="exportCsvBtn" disabled>Export CSV Report</button>
+            <button class="btn" id="exportOscalBtn" disabled>Export OSCAL Component</button>
+            <button class="btn" id="toggleConsoleBtn" style="margin-top: 20px;">Toggle Console</button>
+            <button class="btn" id="exportLogBtn">Export Log</button>
+            <button class="btn btn-secondary" id="resetBtn" style="margin-top: 20px;">Reset Session</button>
+        </div>
+    </aside>
+
+    <div class="main-column">
+        <main class="content-area" id="main-content">
+            <div class="welcome-screen" id="welcome-screen">
+                <h2>CBAS - Compliance Benchmark Authoring Suite</h2>
+                <p>Upload your Catalog, Heuristics, and Repository files to begin.</p>
+            </div>
+        </main>
+
+        <footer class="console" id="console" style="display: none;">
+            <div class="console-content" id="console-content"></div>
+        </footer>
+    </div>
+
+<script>
+    // --- State Management ---
+    const state = {
+        catalogFile: null, heuristicsFile: null, repoFile: null,
+        catalogData: null, heuristicsData: null, zipFile: null,
+        controlMap: new Map(), scanResults: [], isScanRunning: false,
+        scanStartTime: null, scanTimerInterval: null,
+    };
+
+    // --- DOM Element References ---
+    const UIElements = {
+        catalogInput: document.getElementById('catalogFile'),
+        heuristicsInput: document.getElementById('heuristicsFile'),
+        repoInput: document.getElementById('repoFile'),
+        catalogStatus: document.getElementById('catalogStatus'),
+        heuristicsStatus: document.getElementById('heuristicsStatus'),
+        repoStatus: document.getElementById('repoStatus'),
+        mainContent: document.getElementById('main-content'),
+        welcomeScreen: document.getElementById('welcome-screen'),
+        resetBtn: document.getElementById('resetBtn'),
+        scanBtn: document.getElementById('scanBtn'),
+        stopScanBtn: document.getElementById('stopScanBtn'),
+        exportCsvBtn: document.getElementById('exportCsvBtn'),
+        exportOscalBtn: document.getElementById('exportOscalBtn'),
+        exportLogBtn: document.getElementById('exportLogBtn'),
+        toggleConsoleBtn: document.getElementById('toggleConsoleBtn'),
+        console: document.getElementById('console'),
+        consoleContent: document.getElementById('console-content'),
+    };
+
+    // --- Event Listeners ---
+    UIElements.catalogInput.addEventListener('change', (e) => handleFileUpload(e, 'catalog'));
+    UIElements.heuristicsInput.addEventListener('change', (e) => handleFileUpload(e, 'heuristics'));
+    UIElements.repoInput.addEventListener('change', (e) => handleFileUpload(e, 'repo'));
+    UIElements.resetBtn.addEventListener('click', resetApplication);
+    UIElements.scanBtn.addEventListener('click', runScan);
+    UIElements.stopScanBtn.addEventListener('click', stopScan);
+    UIElements.exportLogBtn.addEventListener('click', exportLog);
+    UIElements.toggleConsoleBtn.addEventListener('click', () => {
+        UIElements.console.style.display = UIElements.console.style.display === 'none' ? 'flex' : 'none';
+    });
+    UIElements.exportCsvBtn.addEventListener('click', () => {
+        const uniqueFilename = generateUniqueFilename('hardening-report', 'csv');
+        downloadFile(generateCsvContent(), uniqueFilename, 'text/csv');
+    });
+    UIElements.exportOscalBtn.addEventListener('click', () => {
+        const uniqueFilename = generateUniqueFilename('oscal-component-definition', 'yaml');
+        downloadFile(generateOscalComponentContent(), uniqueFilename, 'application/x-yaml');
+    });
+
+    // --- Logger ---
+    function logMessage(message, type = 'info') {
+        const logClass = `${type}-log`;
+        if(type === 'error') console.error(message);
+        
+        const logP = document.createElement('p');
+        logP.className = logClass;
+        logP.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        UIElements.consoleContent.appendChild(logP);
+        UIElements.consoleContent.scrollTop = UIElements.consoleContent.scrollHeight;
+    }
+
+    // --- Core Functions ---
+
+    function resetApplication() {
+        stopScan();
+        Object.assign(state, {
+            catalogFile: null, heuristicsFile: null, repoFile: null,
+            catalogData: null, heuristicsData: null, zipFile: null,
+            scanResults: [], isScanRunning: false,
+        });
+        state.controlMap.clear();
+
+        UIElements.catalogInput.value = UIElements.heuristicsInput.value = UIElements.repoInput.value = '';
+        
+        updateStatus(UIElements.catalogStatus, 'Awaiting file...');
+        updateStatus(UIElements.heuristicsStatus, 'Awaiting file...');
+        updateStatus(UIElements.repoStatus, 'Awaiting file...');
+        
+        UIElements.mainContent.innerHTML = '';
+        UIElements.mainContent.appendChild(UIElements.welcomeScreen);
+        UIElements.consoleContent.innerHTML = '';
+        logMessage("Session reset.", "info");
+        updateButtonStates();
+    }
+
+    async function handleFileUpload(event, type) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            let count = 0;
+            switch (type) {
+                case 'catalog':
+                    state.catalogFile = file;
+                    state.catalogData = JSON.parse(await file.text());
+                    count = buildControlMap();
+                    updateStatus(document.getElementById('catalogStatus'), `${file.name} (${count} controls loaded)`, true);
+                    logMessage(`Successfully loaded catalog: ${file.name} (${count} controls)`, 'success');
+                    break;
+                case 'heuristics':
+                    state.heuristicsFile = file;
+                    state.heuristicsData = JSON.parse(await file.text());
+                    count = state.heuristicsData.heuristics.length;
+                    updateStatus(document.getElementById('heuristicsStatus'), `${file.name} (${count} rules loaded)`, true);
+                    logMessage(`Successfully loaded heuristics: ${file.name} (${count} rules)`, 'success');
+                    break;
+                case 'repo':
+                    state.repoFile = file;
+                    state.zipFile = await JSZip.loadAsync(file);
+                    count = Object.keys(state.zipFile.files).filter(f => !state.zipFile.files[f].dir).length;
+                    updateStatus(document.getElementById('repoStatus'), `${file.name} (${count} files)`, true);
+                    logMessage(`Successfully loaded repository: ${file.name} (${count} files)`, 'success');
+                    break;
+            }
+        } catch (error) {
+            logMessage(`Failed to load or parse ${file.name}: ${error.message}`, 'error');
+            updateStatus(document.getElementById(`${type}Status`), `Error loading file.`, false);
+        }
+        updateButtonStates();
+    }
+
+    function buildControlMap() {
+        state.controlMap.clear();
+        let controlCount = 0;
+        try {
+            state.catalogData.catalog.groups.forEach(group => {
+                group.controls.forEach(control => {
+                    const statement = control.parts?.find(p => p.name === 'statement');
+                    state.controlMap.set(control.id.toLowerCase(), {
+                        title: control.title,
+                        text: statement?.prose || 'Control text not available.'
+                    });
+                    controlCount++;
+                });
+            });
+        } catch (error) {
+            logMessage("Could not build control map from catalog. Check catalog structure.", "error");
+        }
+        return controlCount;
+    }
+    
+    function updateButtonStates() {
+        const allFilesLoaded = state.catalogData && state.heuristicsData && state.zipFile;
+        const scanInProgress = state.isScanRunning;
+        const scanComplete = state.scanResults.length > 0 && !scanInProgress;
+        
+        UIElements.scanBtn.disabled = !allFilesLoaded || scanInProgress;
+        UIElements.stopScanBtn.style.display = scanInProgress ? 'block' : 'none';
+        UIElements.scanBtn.style.display = scanInProgress ? 'none' : 'block';
+        
+        UIElements.exportCsvBtn.disabled = !scanComplete;
+        UIElements.exportOscalBtn.disabled = !scanComplete;
+        
+        [UIElements.catalogInput, UIElements.heuristicsInput, UIElements.repoInput, UIElements.resetBtn].forEach(el => el.disabled = scanInProgress);
+    }
+
+    function updateStatus(element, message, isLoaded = false) {
+        element.textContent = message;
+        element.className = isLoaded ? 'status loaded icon-check' : 'status';
+    }
+    
+    async function runScan() {
+        state.isScanRunning = true;
+        updateButtonStates();
+        logMessage("Scan initiated...", "info");
+        
+        UIElements.mainContent.innerHTML = `
+            <div class="scan-progress">
+                <h3>Scan in Progress</h3>
+                <div class="progress-bar-container"><div id="progress-bar" class="progress-bar"></div></div>
+                <p id="scan-status-text" style="color: var(--text-muted);"></p>
+                <p><strong>Time Elapsed:</strong> <span id="timer">00:00</span></p>
+                <p><strong>Findings:</strong> <span id="findings-count">0</span></p>
+            </div>`;
+        
+        state.scanResults = [];
+        state.scanStartTime = Date.now();
+        state.scanTimerInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - state.scanStartTime) / 1000);
+            const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const seconds = String(elapsed % 60).padStart(2, '0');
+            document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+        }, 1000);
+
+        const filesToScan = Object.values(state.zipFile.files).filter(f => !f.dir);
+        let filesProcessed = 0;
+
+        for (const zipEntry of filesToScan) {
+            if (!state.isScanRunning) {
+                logMessage('Scan was stopped by user.', 'warn');
+                break; 
+            }
+
+            filesProcessed++;
+            document.getElementById('scan-status-text').textContent = `(${filesProcessed}/${filesToScan.length}) ${zipEntry.name}`;
+            document.getElementById('progress-bar').style.width = `${(filesProcessed / filesToScan.length) * 100}%`;
+            logMessage(`Scanning file ${filesProcessed}/${filesToScan.length}: ${zipEntry.name}`, 'info');
+
+            try {
+                const content = await zipEntry.async('string');
+                for (const heuristic of state.heuristicsData.heuristics) {
+                    try {
+                        if (new RegExp(heuristic.filename_pattern).test(zipEntry.name)) {
+                            const contentRegex = new RegExp(heuristic.pattern, 'gm');
+                            let match;
+                            while ((match = contentRegex.exec(content)) !== null) {
+                                heuristic.controls.forEach(controlId => {
+                                    const controlDetails = state.controlMap.get(controlId.toLowerCase()) || { title: 'Not Found', text: 'Not Found' };
+                                    state.scanResults.push({
+                                        file: zipEntry.name, line: content.substring(0, match.index).split('\\n').length,
+                                        foundText: match[0], heuristic: heuristic, controlId: controlId,
+                                        controlTitle: controlDetails.title, controlText: controlDetails.text
+                                    });
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        logMessage(`Regex error in heuristic for file "${zipEntry.name}": ${e.message}`, 'error');
+                    }
+                }
+                document.getElementById('findings-count').textContent = state.scanResults.length;
+            } catch (readError) {
+                logMessage(`Could not read file ${zipEntry.name}: ${readError.message}`, 'error');
+            }
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        if (state.isScanRunning) {
+             logMessage("Scan completed successfully.", "success");
+        }
+        
+        stopScan();
+    }
+
+    function stopScan(manual = false) {
+        state.isScanRunning = false;
+        if (manual) {
+            logMessage("Scan stopped by user.", "warn");
+        }
+        if (state.scanTimerInterval) {
+            clearInterval(state.scanTimerInterval);
+            state.scanTimerInterval = null;
+        }
+        renderResults();
+        updateButtonStates();
+    }
+    
+    const severityOrder = { 'Critical': 1, 'High': 2, 'Moderate': 3, 'Low': 4, 'Informational': 5 };
+
+    function sortResults(results) {
+        return results.sort((a, b) => {
+            const severityA = severityOrder[a.heuristic.severity] || 99;
+            const severityB = severityOrder[b.heuristic.severity] || 99;
+            return severityA - severityB;
+        });
+    }
+
+    function renderResults() {
+        UIElements.mainContent.innerHTML = '';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'scan-report-title';
+        titleDiv.innerHTML = `
+            <h3>Scan Report</h3>
+            <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+            <p><strong>Catalog:</strong> ${state.catalogFile?.name || 'N/A'}</p>
+            <p><strong>Heuristics:</strong> ${state.heuristicsFile?.name || 'N/A'}</p>
+            <p><strong>Repository:</strong> ${state.repoFile?.name || 'N/A'}</p>
+            <div id="view-toggles" style="margin-top: 10px;"></div>
+        `;
+        UIElements.mainContent.appendChild(titleDiv);
+        
+        const viewToggles = titleDiv.querySelector('#view-toggles');
+        const resultsBtn = createViewBtn('Scan Results', 'results-view', true);
+        const csvBtn = createViewBtn('CSV Preview', 'csv-view');
+        const oscalBtn = createViewBtn('OSCAL Preview', 'oscal-view');
+        viewToggles.append(resultsBtn, csvBtn, oscalBtn);
+
+        const resultsContainer = document.createElement('div');
+        resultsContainer.id = 'results-view-container';
+        UIElements.mainContent.appendChild(resultsContainer);
+        
+        const previewContainer = document.createElement('div');
+        previewContainer.id = 'preview-container';
+        previewContainer.style.display = 'none';
+        UIElements.mainContent.appendChild(previewContainer);
+
+        const summary = document.createElement('h4');
+        summary.textContent = `Found ${state.scanResults.length} hardening opportunities.`;
+        resultsContainer.appendChild(summary);
+
+        if (state.scanResults.length === 0) return;
+
+        const sortedFindings = sortResults(state.scanResults);
+
+        const groupedBySeverity = sortedFindings.reduce((acc, finding) => {
+            const severity = finding.heuristic.severity || 'Informational';
+            if (!acc[severity]) acc[severity] = [];
+            acc[severity].push(finding);
+            return acc;
+        }, {});
+
+        Object.keys(severityOrder).forEach(severity => {
+            if (groupedBySeverity[severity]) {
+                const severityGroup = document.createElement('div');
+                severityGroup.className = 'severity-group';
+                
+                const severityHeader = document.createElement('div');
+                severityHeader.className = 'severity-group-header';
+                severityHeader.innerHTML = `<span>${severity} Findings (${groupedBySeverity[severity].length})</span><span class="arrow">▶</span>`;
+                severityGroup.appendChild(severityHeader);
+
+                const severityContent = document.createElement('div');
+                severityContent.className = 'severity-group-content';
+                
+                const groupedByFile = groupedBySeverity[severity].reduce((acc, finding) => {
+                    if (!acc[finding.file]) acc[finding.file] = [];
+                    acc[finding.file].push(finding);
+                    return acc;
+                }, {});
+
+                for (const file in groupedByFile) {
+                    const header = document.createElement('div');
+                    header.className = 'finding-accordion-header';
+                    header.innerHTML = `<span>📄 ${file} (${groupedByFile[file].length} findings)</span><span class="arrow">▶</span>`;
+                    
+                    const detailsContainer = document.createElement('div');
+                    detailsContainer.className = 'finding-details';
+
+                    groupedByFile[file].forEach(finding => {
+                        const detail = document.createElement('div');
+                        detail.className = 'detail-block';
+                        detail.innerHTML = `
+                            <div class="finding-accordion-header" style="margin-top:0; margin-bottom: 1rem; cursor: default;">
+                                <span class="finding-title">Control ${finding.controlId.toUpperCase()}: ${finding.controlTitle}</span>
+                                <div class="finding-tags">
+                                    <span class="tag severity-${finding.heuristic.severity || 'Informational'}">${finding.heuristic.severity || 'N/A'}</span>
+                                    <span class="tag confidence-tag">${finding.heuristic.confidence || 'N/A'}</span>
+                                </div>
+                            </div>
+                            <p><strong>Control Text:</strong> ${finding.controlText}</p>
+                            <p style="margin-top:10px;"><strong>Justification:</strong> ${finding.heuristic.justification}</p>
+                            <h5 style="margin-top:15px;">Audit Test</h5>
+                            <pre>${finding.heuristic.check.template.replace('${file}', finding.file).replace('${line}', finding.line)}</pre>
+                            <h5 style="margin-top:15px;">Remediation Guidance</h5>
+                            <pre>${finding.heuristic.fix.template.replace('${file}', finding.file).replace('${line}', finding.line)}</pre>
+                        `;
+                        detailsContainer.appendChild(detail);
+                    });
+                    
+                    header.onclick = () => {
+                        const isExpanded = detailsContainer.style.maxHeight;
+                        if (isExpanded && isExpanded !== '0px') {
+                            detailsContainer.style.maxHeight = '0px';
+                            header.querySelector('.arrow').classList.remove('down');
+                        } else {
+                            detailsContainer.style.maxHeight = detailsContainer.scrollHeight + "px";
+                            header.querySelector('.arrow').classList.add('down');
+                        }
+                    };
+                    severityContent.appendChild(header);
+                    severityContent.appendChild(detailsContainer);
+                }
+                severityGroup.appendChild(severityContent);
+                resultsContainer.appendChild(severityGroup);
+
+                severityHeader.onclick = () => {
+                    const isExpanded = severityContent.style.maxHeight;
+                    if (isExpanded && isExpanded !== '0px') {
+                        severityContent.style.maxHeight = '0px';
+                        severityHeader.querySelector('.arrow').classList.remove('down');
+                    } else {
+                        severityContent.style.maxHeight = severityContent.scrollHeight + "px";
+                        severityHeader.querySelector('.arrow').classList.add('down');
+                    }
+                };
+            }
+        });
+    }
+    
+    function createViewBtn(text, viewId, isActive = false) {
+        const btn = document.createElement('button');
+        btn.textContent = text;
+        btn.className = `btn view-toggle-btn ${isActive ? 'active' : ''}`;
+        btn.dataset.viewId = viewId;
+        btn.onclick = () => switchView(viewId);
+        return btn;
+    }
+
+    function switchView(viewId) {
+        document.querySelectorAll('.view-toggle-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`[data-view-id="${viewId}"]`).classList.add('active');
+
+        const resultsContainer = document.getElementById('results-view-container');
+        const previewContainer = document.getElementById('preview-container');
+
+        if (viewId === 'results-view') {
+            resultsContainer.style.display = 'block';
+            previewContainer.style.display = 'none';
+        } else {
+            resultsContainer.style.display = 'none';
+            previewContainer.style.display = 'block';
+            renderPreview(viewId.replace('-view', ''));
+        }
+    }
+
+    function renderPreview(type) {
+        const previewContainer = document.getElementById('preview-container');
+        if (type === 'csv') {
+            const csvContent = generateCsvContent();
+            const rows = csvContent.split('\n').map(row => {
+                // A more robust CSV parser for preview
+                const regex = /(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|([^,]+))/g;
+                let match;
+                const cells = [];
+                while(match = regex.exec(row)){
+                    cells.push(match[1] ? match[1].replace(/""/g, '"') : match[2]);
+                }
+                return cells;
+            });
+            let tableHtml = '<table><thead><tr>';
+            rows[0].forEach(header => tableHtml += `<th>${header}</th>`);
+            tableHtml += '</tr></thead><tbody>';
+            rows.slice(1).forEach(row => {
+                if (row.length > 1) {
+                    tableHtml += '<tr>';
+                    row.forEach(cell => tableHtml += `<td>${cell}</td>`);
+                    tableHtml += '</tr>';
+                }
+            });
+            tableHtml += '</tbody></table>';
+            previewContainer.innerHTML = tableHtml;
+        } else if (type === 'oscal') {
+            const oscalContent = generateOscalComponentContent();
+            previewContainer.innerHTML = `<pre><code>${oscalContent.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`;
+        }
+    }
+    
+    // --- Export Content Generation ---
+    function generateUniqueFilename(base, extension) {
+        const date = new Date();
+        const timestamp = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}-${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
+        const catName = state.catalogFile?.name.replace(/\.json/i, '') || 'catalog';
+        const libName = state.heuristicsFile?.name.replace(/\.json/i, '') || 'lib';
+        const repoName = state.repoFile?.name.replace(/\.zip/i, '') || 'repo';
+        return `${base}-${repoName}-${libName}-${catName}-${timestamp}.${extension}`;
+    }
+
+    function generateCsvContent() {
+        const headers = ["Severity", "Confidence", "Control ID", "Control Title", "File", "Line", "Finding Justification", "Control Text", "Audit Test", "Remediation Guidance"];
+        const sortedFindings = sortResults([...state.scanResults]);
+        const rows = sortedFindings.map(r => [
+            r.heuristic.severity || 'N/A',
+            r.heuristic.confidence || 'N/A',
+            r.controlId.toUpperCase(), r.controlTitle, r.file, r.line, r.heuristic.justification,
+            r.controlText, r.heuristic.check.template, r.heuristic.fix.template
+        ]);
+        let csvContent = headers.join(",") + "\n";
+        rows.forEach(row => { csvContent += row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(",") + "\n"; });
+        return csvContent;
+    }
+
+    function generateOscalComponentContent() {
+        const sortedFindings = sortResults([...state.scanResults]);
+        const implementedRequirements = sortedFindings.map(finding => {
+            const description = finding.heuristic.fix.template.replace(/\n/g, '\n          ');
+            return `      - uuid: ${generateUuid()}
+        control-id: ${finding.controlId.toUpperCase()}
+        props:
+          - name: severity
+            value: ${finding.heuristic.severity || 'N/A'}
+          - name: confidence
+            value: ${finding.heuristic.confidence || 'N/A'}
+        description: |
+          [File: ${finding.file}]
+          ${description}`;
+        }).join('\n');
+
+        return `component-definition:
+  uuid: ${generateUuid()}
+  metadata:
+    title: Hardened Component Definition from Scan (${state.repoFile.name})
+    last-modified: ${new Date().toISOString()}
+    version: 1.0.0-scan
+    oscal-version: 1.0.4
+  components:
+    - uuid: ${generateUuid()}
+      type: software
+      title: Scanned Product Configuration
+      description: This component definition is auto-generated from a scan of ${state.repoFile.name} using ${state.heuristicsFile.name}.
+      control-implementations:
+        - uuid: ${generateUuid()}
+          source: ${state.catalogData?.catalog?.metadata?.links?.[0]?.href || 'urn:ietf:rfc:3986'}
+          description: Control implementations based on scan results.
+          implemented-requirements:
+${implementedRequirements}
+`;
+    }
+
+    // --- Download Functions ---
+    const downloadFile = (content, fileName, contentType) => {
+        const a = document.createElement("a");
+        const file = new Blob([content], { type: contentType });
+        a.href = URL.createObjectURL(file); a.download = fileName; a.click();
+        URL.revokeObjectURL(a.href);
+    };
+
+    function exportLog() {
+        const logContent = UIElements.consoleContent.innerText;
+        const uniqueId = new Date().toISOString().replace(/[:.]/g, '-');
+        downloadFile(logContent, `cbas-log-${uniqueId}.txt`, 'text/plain');
+    }
+
+    function exportCsv() {
+        const uniqueFilename = generateUniqueFilename('hardening-report', 'csv');
+        downloadFile(generateCsvContent(), uniqueFilename, 'text/csv');
+    }
+
+    function exportOscalComponent() {
+        const uniqueFilename = generateUniqueFilename('oscal-component-definition', 'yaml');
+        downloadFile(generateOscalComponentContent(), uniqueFilename, 'application/x-yaml');
+    }
+    
+    const generateUuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+</script>
+</body>
+</html>
