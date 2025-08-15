@@ -1,0 +1,120 @@
+{
+    "heuristics": [
+        {
+            "family": "Secrets Management",
+            "cwe": "CWE-798",
+            "confidence": "High",
+            "type": "content",
+            "filename_pattern": "\\.(py|java|sh|go|yml|yaml|json|conf|ini|properties|tf|txt|md)$",
+            "pattern": "(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}",
+            "severity": "High",
+            "controls": ["ac-3", "ia-5"],
+            "justification": "A string matching the pattern for an AWS Access Key ID was found hardcoded.",
+            "check": { "engine": "text", "template": "ACTION: In file `${file}`, validate if the detected string is an active AWS credential." },
+            "fix": { "engine": "text", "template": "REMEDIATION: Immediately rotate any active keys found. Refactor the code to source credentials from a secure store like Ansible Vault or a cloud secrets manager." }
+        },
+        {
+            "family": "Secrets Management",
+            "cwe": "CWE-312",
+            "confidence": "Medium",
+            "type": "content",
+            "filename_pattern": "\\.(pem|key|pkcs8)$",
+            "pattern": "-----BEGIN (RSA|EC|OPENSSH|ENCRYPTED )?PRIVATE KEY-----",
+            "severity": "Critical",
+            "controls": ["sc-13", "ia-5"],
+            "justification": "A file appears to contain an unencrypted private key, which provides direct authentication to systems or services.",
+            "check": { "engine": "text", "template": "ACTION: The file `${file}` appears to be a private key. Committing secrets to version control is a critical security risk." },
+            "fix": { "engine": "text", "template": "REMEDIATION: Immediately revoke the key and remove it from the repository's history. Store the key in a secure location like Ansible Vault and load it at runtime. Add the filename pattern to `.gitignore`." }
+        },
+        {
+            "family": "Data Transmission Security",
+            "cwe": "CWE-295",
+            "confidence": "High",
+            "type": "content",
+            "filename_pattern": "\\.(py|java|sh|go)$",
+            "pattern": "^.*(verify\\s*=\\s*False).*$",
+            "severity": "High",
+            "controls": ["sc-8"],
+            "justification": "Code was found that disables TLS/SSL certificate validation for an HTTP client.",
+            "check": { "engine": "text", "template": "ACTION: The code in `${file}` on line `${line}` appears to disable TLS certificate validation, making the connection vulnerable to Man-in-the-Middle (MITM) attacks." },
+            "fix": { "engine": "text", "template": "REMEDIATION: Change the line `${line}` in `${file}` to remove the `verify=False` argument. If connecting to a server with an internal certificate, configure the client's trust store to accept that specific CA." }
+        },
+        {
+            "family": "Ansible Configuration Security",
+            "cwe": "CWE-295",
+            "confidence": "High",
+            "type": "content",
+            "filename_pattern": "ansible\\.cfg$",
+            "pattern": "^\\s*host_key_checking\\s*=\\s*False",
+            "severity": "High",
+            "controls": ["sc-8", "si-4"],
+            "justification": "Ansible is configured to disable SSH host key checking, making all Ansible connections vulnerable to Man-in-the-Middle (MITM) attacks.",
+            "check": { "engine": "text", "template": "ACTION: The configuration in `${file}` disables SSH host key checking. This is a significant security risk and should be enabled." },
+            "fix": { "engine": "text", "template": "REMEDIATION: In `${file}`, remove the `host_key_checking = False` line or set it to `True` to enforce host key validation." }
+        },
+        {
+            "family": "Ansible Playbook Security",
+            "cwe": "CWE-78",
+            "confidence": "Medium",
+            "type": "content",
+            "filename_pattern": "\\.(yml|yaml)$",
+            "pattern": "(shell|command):\\s*.*?\\{\\{.*?\\}\\}",
+            "severity": "High",
+            "controls": ["si-10"],
+            "justification": "The use of the `shell` or `command` module with an unquoted Jinja2 variable can lead to command injection vulnerabilities if the variable contains malicious user input.",
+            "check": { "engine": "text", "template": "ACTION: In `${file}` on line `${line}`, review the use of the `${match1}` module with a variable. Ensure the variable is properly sanitized and quoted to prevent command injection." },
+            "fix": { "engine": "text", "template": "REMEDIATION: Whenever possible, replace the task with a dedicated Ansible module. If `shell` or `command` is required, ensure the variable is always quoted (e.g., `\"{{ my_var }}\"`) to treat it as a single string argument." }
+        },
+        {
+            "family": "SSH Hardening",
+            "cwe": "CWE-306",
+            "confidence": "High",
+            "type": "content",
+            "filename_pattern": "sshd_config$",
+            "pattern": "^\\s*PasswordAuthentication\\s+yes",
+            "severity": "High",
+            "controls": ["ia-2", "ac-17"],
+            "justification": "SSH is configured to allow password-based authentication, which is more susceptible to brute-force attacks than key-based authentication.",
+            "check": { "engine": "text", "template": "ACTION: In `${file}`, verify that `PasswordAuthentication` is set to `no` to enforce stronger, key-based authentication." },
+            "fix": { "engine": "text", "template": "REMEDIATION: In `${file}`, change the line `${line}` to `PasswordAuthentication no` and ensure all access is provisioned via SSH keys. A restart of the SSH service is required." }
+        },
+        {
+            "family": "Container Security",
+            "cwe": "CWE-284",
+            "confidence": "High",
+            "type": "content",
+            "filename_pattern": "(Dockerfile|Containerfile)$",
+            "pattern": "^\\s*USER\\s+(root|0)",
+            "severity": "High",
+            "controls": ["ac-6"],
+            "justification": "The container image is configured to run its primary process as the root user. This violates the principle of least privilege and increases the risk of container breakout vulnerabilities.",
+            "check": { "engine": "text", "template": "ACTION: In `${file}`, verify that the final `USER` instruction is set to a non-root user." },
+            "fix": { "engine": "text", "template": "REMEDIATION: In `${file}`, add instructions to create a non-privileged user and group (e.g., `RUN groupadd -r appuser && useradd -r -g appuser appuser`), and switch to that user with a `USER appuser` command before the `CMD` or `ENTRYPOINT`." }
+        },
+        {
+            "family": "Container Security",
+            "cwe": "CWE-494",
+            "confidence": "High",
+            "type": "content",
+            "filename_pattern": "(Dockerfile|Containerfile)$",
+            "pattern": "^FROM\\s+[^:]*latest",
+            "severity": "Moderate",
+            "controls": ["cm-2", "si-7"],
+            "justification": "The container's base image is pinned to the 'latest' tag, which is mutable. This can lead to unpredictable builds and the unintentional introduction of vulnerabilities.",
+            "check": { "engine": "text", "template": "ACTION: The `FROM` instruction in `${file}` uses the `:latest` tag, which makes the build non-deterministic." },
+            "fix": { "engine": "text", "template": "REMEDIATION: Replace the `:latest` tag with a specific, immutable version tag (e.g., `ubuntu:22.04`) or preferably a digest hash (e.g., `ubuntu@sha256:...`) to ensure repeatable and secure builds." }
+        },
+        {
+            "family": "Supply Chain Risk Management (SR)",
+            "cwe": "CWE-937",
+            "confidence": "High",
+            "type": "filename",
+            "pattern": "(package\\.json|pom\\.xml|requirements\\.txt|Gemfile|go\\.mod)",
+            "severity": "Informational",
+            "controls": ["sr-3", "sa-12", "si-2"],
+            "justification": "A dependency management file was detected. The software supply chain should be secured against vulnerable third-party components.",
+            "check": { "engine": "text", "template": "ACTION: The file `${file}` declares third-party dependencies. Use a Software Composition Analysis (SCA) tool to scan these dependencies for known vulnerabilities." },
+            "fix": { "engine": "text", "template": "REMEDIATION: Integrate an SCA tool (like Trivy, Grype, or Snyk) into the CI/CD pipeline to continuously monitor for new vulnerabilities. Establish a process to update or replace any identified vulnerable dependencies." }
+        }
+    ]
+}
