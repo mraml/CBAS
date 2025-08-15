@@ -16,7 +16,6 @@
 
 ## Features
 
-* **Professional UI**: A three-panel layout for intuitive navigation and analysis.
 * **Robust Scanning Engine**: Ingests a zipped software repository and scans its contents against a custom heuristics library without freezing the UI.
 * **Full Scan Control**: Manually initiate or stop scans at any time without losing your session data. The application provides real-time progress, including a progress bar, file counters, and an elapsed time clock.
 * **Detailed Console Logging**: A toggleable console provides verbose, real-time feedback on the scan's progress, including successful file ingestions, scan status, and any errors encountered.
