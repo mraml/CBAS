@@ -1,0 +1,116 @@
+{
+  "heuristics": [
+    {
+      "//": "--- TEMPLATE: CONTENT SCAN ---",
+      "//": "Use this type to find a specific string or pattern within the content of files.",
+      "family": "Category Name [e.g., Secrets Management, Ansible Playbook Security]",
+      "cwe": "CWE-ID [Optional, e.g., CWE-798 for Use of Hard-coded Credentials]",
+      "confidence": "Certainty of the finding [High, Medium, Low]",
+      "type": "content",
+      "filename_pattern": "\\.(py|yml|conf|ini)$",
+      "pattern": "your_regular_expression_here",
+      "severity": "Severity level [Critical, High, Moderate, Low, Informational]",
+      "controls": [
+        "ac-1",
+        "ia-5"
+      ],
+      "justification": "Explain why this finding is a security concern and what risk it represents. This text appears in the report.",
+      "check": {
+        "engine": "text",
+        "template": "ACTION: Describe the steps a security analyst should take to verify this finding. You can use template variables like `${file}` and `${line}`."
+      },
+      "fix": {
+        "engine": "text",
+        "template": "REMEDIATION: Provide clear, actionable steps for a developer or system administrator to fix this issue."
+      }
+    },
+    {
+      "//": "--- EXAMPLE 1: Find Hardcoded AWS Keys (Content Scan) ---",
+      "//": "This rule looks for patterns matching AWS keys but only in common text-based files to ensure performance.",
+      "family": "Secrets Management",
+      "cwe": "CWE-798",
+      "confidence": "High",
+      "type": "content",
+      "filename_pattern": "\\.(py|java|sh|go|yml|yaml|json|conf|ini|properties|tf|txt|md)$",
+      "pattern": "(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}",
+      "severity": "High",
+      "controls": [
+        "ac-3",
+        "ia-5"
+      ],
+      "justification": "A string matching the pattern for an AWS Access Key ID was found hardcoded. Hardcoded credentials can be easily compromised if the code is exposed.",
+      "check": {
+        "engine": "text",
+        "template": "ACTION: In file `${file}`, validate if the detected string on line `${line}` is an active AWS credential using a tool like the AWS CLI."
+      },
+      "fix": {
+        "engine": "text",
+        "template": "REMEDIATION: Immediately rotate any active keys found. Refactor the code to source credentials from a secure store like Ansible Vault or a cloud secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault)."
+      }
+    },
+    {
+      "//": "--- TEMPLATE: FILENAME SCAN ---",
+      "//": "Use this type to find files based on their name or path. This is much faster than a content scan.",
+      "family": "Category Name [e.g., Supply Chain Risk Management]",
+      "type": "filename",
+      "pattern": "your_filename_regex_here",
+      "severity": "Informational",
+      "controls": [
+        "sr-3"
+      ],
+      "justification": "Explain why the presence of this file is a security consideration.",
+      "check": {
+        "engine": "text",
+        "template": "ACTION: Describe what an analyst should do with this information. The `${file}` variable contains the full path of the matched file."
+      },
+      "fix": {
+        "engine": "text",
+        "template": "REMEDIATION: Provide guidance on the next steps, such as running a specific tool or performing a manual review."
+      }
+    },
+    {
+      "//": "--- EXAMPLE 2: Identify Dependency Files (Filename Scan) ---",
+      "//": "This rule identifies common dependency files to recommend a Software Composition Analysis (SCA) scan.",
+      "family": "Supply Chain Risk Management (SR)",
+      "cwe": "CWE-937",
+      "confidence": "High",
+      "type": "filename",
+      "pattern": "(package\\.json|pom\\.xml|requirements\\.txt|Gemfile|go\\.mod)$",
+      "severity": "Informational",
+      "controls": [
+        "sr-3",
+        "sa-12",
+        "si-2"
+      ],
+      "justification": "A dependency management file was detected. The software supply chain should be secured against vulnerable third-party components.",
+      "check": {
+        "engine": "text",
+        "template": "ACTION: The file `${file}` declares third-party dependencies. Use a Software Composition Analysis (SCA) tool to scan these dependencies for known vulnerabilities."
+      },
+      "fix": {
+        "engine": "text",
+        "template": "REMEDIATION: Integrate an SCA tool (like Trivy, Grype, or Snyk) into the CI/CD pipeline to continuously monitor for new vulnerabilities. Establish a process to update or replace any identified vulnerable dependencies."
+      }
+    },
+    {
+      "//": "--- TEMPLATE: MANUAL REVIEW ---",
+      "//": "Use this type for checks that cannot be automated and require manual policy or process review.",
+      "//": "The scanner will always report this finding, serving as a reminder in the final report.",
+      "family": "Category Name [e.g., Access Control Policy]",
+      "type": "manual_review",
+      "severity": "Moderate",
+      "controls": [
+        "ac-1"
+      ],
+      "justification": "Explain the policy or procedure that needs to be in place.",
+      "check": {
+        "engine": "text",
+        "template": "ACTION (Manual): Describe the exact steps for an auditor to verify compliance (e.g., 'Request and review the Incident Response Plan document')."
+      },
+      "fix": {
+        "engine": "text",
+        "template": "REMEDIATION (Manual): Describe the steps to become compliant (e.g., 'Develop and ratify an official Incident Response Plan')."
+      }
+    }
+  ]
+}
