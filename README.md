@@ -33,10 +33,10 @@
 
 ## How to Use
 
-1.  **Save the Application**: Download the `enterprise_hardening_studio_final.html` file and open it in a modern web browser (Chrome, Firefox, Edge).
-2.  **Load Files**: Use the "Control Panel" on the left to upload the three required files in order:
-    * **OSCAL Control Catalog**: A JSON file containing the security controls (e.g., `Catalog-800-53r5.json`).
-    * **Heuristics Library**: Your custom-defined set of rules in JSON format (e.g., `lib-sec.json`).
+1.  **Save the Application**: Download the `app-cbas.html` file and open it in a modern web browser (Chrome, Firefox, Edge).
+2.  **Load Files**: Use the Control Panel on the left to upload the three required files in order:
+    * **OSCAL Control Catalog**: A JSON file containing the security controls (e.g., [NIST_SP-800-53_rev5_catalog.json](https://raw.githubusercontent.com/usnistgov/oscal-content/refs/heads/main/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json)).
+    * **Heuristics Library**: Your custom-defined set of rules in JSON format based on `template.json`, or use the pre-defined `default.json`.
     * **Software Repository**: The zipped source code of the product you want to scan.
 3.  **Monitor Ingestion**: As each file is loaded, the status in the sidebar will update with the number of controls, rules, or files ingested. Check the console for detailed logs.
 4.  **Run Scan**: Once all three files are loaded, the **Scan Repository** button will become active. Click it to begin the analysis.
